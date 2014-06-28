@@ -5,6 +5,7 @@ using MonoTouch.UIKit;
 using System.Collections.Generic;
 using System.Linq;
 
+
 namespace SWTableViewCell
 {
 	public enum SWCellState
@@ -25,7 +26,10 @@ namespace SWTableViewCell
 		public int UtilityButtonIndex { get; set; }
 		public NSIndexPath IndexPath { get; set; }
 	}
-
+  public class CellTappedEventArgs:EventArgs
+  {
+    public SWTableViewCell sender { get; set; }
+  }
 	public partial class SWTableViewCell : UITableViewCell
 	{
 		public const float UtilityButtonsWidthMax = 260;
@@ -35,9 +39,9 @@ namespace SWTableViewCell
 
 		UITableView containingTableView;
 
-		UIButton[] rightUtilityButtons;
+    public UIButton[] rightUtilityButtons{ get; set; }
 
-		UIView scrollViewLeft;
+    public UIView scrollViewLeft { get; set; }
 
 
 		SWCellState cellState; // The state of the cell within the scroll view, can be left, right or middle
@@ -45,7 +49,7 @@ namespace SWTableViewCell
 	
 
 		// Scroll view to be added to UITableViewCell
-		 UIScrollView cellScrollView;
+    public UIScrollView cellScrollView;
 
 		// The cell's height
 		float height;
@@ -72,28 +76,36 @@ namespace SWTableViewCell
 		}
 	
 
-		public SWTableViewCell (UITableViewCellStyle style, string reuseIdentifier, 
-		                        UITableView containingTable, IEnumerable<UIButton> rightUtilityButtons, 
-		                        UIView leftView):base(style, reuseIdentifier)
+    public SWTableViewCell(UITableViewCellStyle style, string reuseIdentifier, 
+      UITableView containingTable, IEnumerable<UIButton> rightUtilityButtons, 
+      UIView leftView):this(style, reuseIdentifier,containingTable){
+      this.constructSWTableViewCell (rightUtilityButtons, leftView);
+    }
+    public SWTableViewCell (UITableViewCellStyle style, string reuseIdentifier ,UITableView tv) : base (style, reuseIdentifier){
+      this.containingTableView = tv;
+      this.height = containingTableView.RowHeight;
+      this.scrollViewDelegate = new SWScrollViewDelegate (this);
+
+
+      // Check if the UITableView will display Indices on the right. If that's the case, add a padding
+      if(containingTableView.RespondsToSelector(new MonoTouch.ObjCRuntime.Selector("sectionIndexTitlesForTableView:")))
+      {
+        var indices = containingTableView.Source.SectionIndexTitles (containingTableView);
+        additionalRightPadding = indices == null || indices.Length == 0 ? 0 : SectionIndexWidth;
+      }
+    }
+
+    public void constructSWTableViewCell (
+		                        IEnumerable<UIButton> rightUtilityButtons, 
+      UIView leftView, UIView content=null)
 		{
 			this.scrollViewLeft = leftView;
 			this.rightUtilityButtons = rightUtilityButtons.ToArray();
 			this.scrollViewButtonViewRight = new SWUtilityButtonView (this.rightUtilityButtons, this);
 
-			this.containingTableView = containingTable;
-			this.height = containingTableView.RowHeight;
-			this.scrollViewDelegate = new SWScrollViewDelegate (this);
-	
-
-			// Check if the UITableView will display Indices on the right. If that's the case, add a padding
-			if(containingTableView.RespondsToSelector(new MonoTouch.ObjCRuntime.Selector("sectionIndexTitlesForTableView:")))
-			{
-				var indices = containingTableView.Source.SectionIndexTitles (containingTableView);
-				additionalRightPadding = indices == null || indices.Length == 0 ? 0 : SectionIndexWidth;
-			}
 
 			// Set up scroll view that will host our cell content
-			this.cellScrollView = new UIScrollView (new RectangleF (0, 0, Bounds.Width, height)); //TODO:frames
+      this.cellScrollView = new UIScrollView (new RectangleF (0, 0, Bounds.Width, height)); //TODO:frames
 			this.cellScrollView.ContentSize = new SizeF (Bounds.Width + this.UtilityButtonsPadding, height);//TODO:frames
 			this.cellScrollView.ContentOffset = ScrollViewContentOffset;
 			this.cellScrollView.Delegate = this.scrollViewDelegate;
@@ -103,7 +115,7 @@ namespace SWTableViewCell
 			this.cellScrollView.AddGestureRecognizer (tapGestureRecognizer);
 		
 			// Set up the views that will hold the utility buttons
-			this.scrollViewLeft.Frame = new RectangleF (ScrollLeftViewWidth, 0, ScrollLeftViewWidth, height);//TODO:frame
+      this.scrollViewLeft.Frame = new RectangleF (ScrollLeftViewWidth, 0, ScrollLeftViewWidth, height);//TODO:frame
 			this.cellScrollView.AddSubview (scrollViewLeft);
 
 			this.scrollViewButtonViewRight.Frame = new RectangleF (Bounds.Width, 0, RightUtilityButtonsWidth, height); //TODO:frame
@@ -129,17 +141,28 @@ namespace SWTableViewCell
 			HideSwipedContent (false);
 		}
 
+
+    public void updateLeftFrame(){
+      this.scrollViewLeft.Frame = new RectangleF (ScrollLeftViewWidth, 0, ScrollLeftViewWidth, height);
+      // Populate the button views with utility buttons
+      this.scrollViewButtonViewRight.PopulateUtilityButtons ();
+      // Create the content view that will live in our scroll view
+      this.scrollViewContentView = new UIView(new RectangleF(ScrollLeftViewWidth, 0, Bounds.Width, height));
+      this.scrollViewContentView.BackgroundColor = UIColor.White;
+      this.cellScrollView.AddSubview (this.scrollViewContentView);
+    }
+
 		public SWCellState State {
 			get{ return cellState; }
 		}
 
-		void OnScrollViewPressed(UITapGestureRecognizer tap)
+    void OnScrollViewPressed(UITapGestureRecognizer tap)
 		{
 			if (cellState == SWCellState.Center) {
-				if (containingTableView.Source != null) {
-					var indexPath = this.containingTableView.IndexPathForCell (this);
-					this.containingTableView.Source.RowSelected (containingTableView, indexPath);
-				}
+        var handler = this.CellTapped;
+        if (handler != null) {
+          handler(this, new CellTappedEventArgs{sender = this});
+        }
 			} else {
 				// Scroll back to center
 				this.HideSwipedContent (true);
@@ -163,7 +186,7 @@ namespace SWTableViewCell
 			}
 		} 
 
-		protected internal void OnLeftUtilityButtonPressed(UIButton sender)
+    protected internal void OnLeftUtilityButtonPressed(UIButton sender)
 		{
 			int tag = sender.Tag;
 			var handler = this.UtilityButtonPressed;
@@ -184,6 +207,7 @@ namespace SWTableViewCell
 
 		public event EventHandler<ScrollingEventArgs> Scrolling;
 		public event EventHandler<CellUtilityButtonClickedEventArgs> UtilityButtonPressed;
+    public event EventHandler<CellTappedEventArgs> CellTapped;
 
 		public override void LayoutSubviews ()
 		{
