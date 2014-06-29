@@ -52,7 +52,7 @@ namespace SWTableViewCell
     public UIScrollView cellScrollView;
 
 		// The cell's height
-		float height;
+    public float height;
 
 		// Views that live in the scroll view
 		UIView scrollViewContentView;
@@ -83,7 +83,7 @@ namespace SWTableViewCell
     }
     public SWTableViewCell (UITableViewCellStyle style, string reuseIdentifier ,UITableView tv) : base (style, reuseIdentifier){
       this.containingTableView = tv;
-      this.height = containingTableView.RowHeight;
+      this.height = containingTableView.RowHeight;  //Default Behavior
       this.scrollViewDelegate = new SWScrollViewDelegate (this);
 
 
@@ -129,12 +129,13 @@ namespace SWTableViewCell
 			this.scrollViewContentView = new UIView(new RectangleF(ScrollLeftViewWidth, 0, Bounds.Width, height));
 			this.scrollViewContentView.BackgroundColor = UIColor.White;
 			this.cellScrollView.AddSubview (this.scrollViewContentView);
-
+      this.cellScrollView.BringSubviewToFront (this.scrollViewContentView);
 			
 			// Add the cell scroll view to the cell 
 			var contentViewParent = Subviews[0];
 			foreach (var subView in contentViewParent.Subviews) {
 				this.scrollViewContentView.AddSubview (subView);
+        subView.BackgroundColor = UIColor.White;
 			}
 			AddSubview (this.cellScrollView);
 		
